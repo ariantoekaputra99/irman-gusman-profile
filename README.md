@@ -1,25 +1,11 @@
-# Irman Gusman Profile
+# Irman Gusman — Profil Publik
 
-Website profil informatif nonresmi dengan desain editorial/institusional yang responsif dan ringan.
+Website profil publik nonresmi dengan arah visual editorial/institusional.
 
-## Highlights
-- Responsive mobile / tablet / desktop
-- Editorial visual dengan typography serif + sans-serif
-- Hero portrait, timeline, pendidikan, pengalaman kelembagaan, dan sumber
-- Mobile navigation
-- Scroll reveal animation tanpa framework
-- Static site: tanpa build step, siap GitHub Pages
+Fitur: Home, Tentang, Perjalanan, Fokus & Pemikiran, Kegiatan Terbaru, Sumber, responsive navigation dan animasi ringan.
 
-## Deploy ke GitHub Pages
-1. Buka **Settings → Pages** di repository.
-2. Pilih **Deploy from a branch**.
-3. Branch: `main`, folder: `/ (root)`.
-4. Simpan dan tunggu proses deployment.
+Deploy GitHub Pages: Settings → Pages → Deploy from a branch → main → root.
 
-Expected URL:
-`https://ariantoekaputra99.github.io/irman-gusman-profile/`
+URL: https://ariantoekaputra99.github.io/irman-gusman-profile/
 
-## Sources
-Konten faktual utama merujuk pada profil MPR RI/DPD RI dan sumber publik yang ditautkan di halaman **Sumber**. Foto hero berasal dari sumber foto KPU RI yang tercantum melalui Wikimedia Commons.
-
-> Situs ini adalah profil informatif nonresmi dan bukan kanal resmi pemerintah atau kampanye.
+Situs ini bukan situs resmi pemerintah atau kanal kampanye. Informasi faktual diarahkan ke sumber resmi yang ditautkan pada halaman.
