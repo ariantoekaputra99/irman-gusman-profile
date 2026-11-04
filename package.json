@@ -6,7 +6,12 @@
     "dev": "next dev",
     "build": "next build",
     "start": "npx serve out",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "node --test scripts/*.test.mjs",
+    "news:fetch": "node scripts/fetch-news.mjs",
+    "news:list": "node scripts/approve-news.mjs list",
+    "news:approve": "node scripts/approve-news.mjs approve",
+    "news:reject": "node scripts/approve-news.mjs reject"
   },
   "dependencies": {
     "next": "^16.4.5",

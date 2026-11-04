@@ -1,20 +1,31 @@
 import type { Metadata } from "next";
 import PageShell from "@/components/PageShell";
-import { formatDate, newsSorted } from "@/lib/content";
+import { formatDate, newsSorted, site } from "@/lib/content";
 
 export const metadata: Metadata = {
-  title: "Berita & Kegiatan",
-  description: "Arsip kegiatan dan pernyataan publik Irman Gusman dari sumber publik.",
+  title: "Sorotan Kegiatan",
+  description: "Sorotan kegiatan dan pernyataan publik Irman Gusman dari sumber publik.",
 };
 
 export default function NewsPage() {
   return (
     <PageShell
       wide
-      eyebrow="ARSIP KEGIATAN"
-      title="Berita & Kegiatan"
+      eyebrow="SOROTAN KEGIATAN"
+      title="Sorotan Kegiatan"
       intro="Setiap entri menautkan ke sumber aslinya agar dapat diverifikasi."
     >
+      <p className="note mt-10">
+        {site.newsNote}{" "}
+        <a
+          href={site.newsSearchUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="gold font-bold"
+        >
+          Cari semua pemberitaan →
+        </a>
+      </p>
       <div className="grid md:grid-cols-3 gap-5 mt-14">
         {newsSorted.map((n) => (
           <article className="card p-7 min-h-72" key={n.slug}>
