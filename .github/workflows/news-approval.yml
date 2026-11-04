@@ -29,13 +29,14 @@ jobs:
       TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
       TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
       GH_TOKEN: ${{ github.token }}
-      NEWS_OUTBOX: ${{ runner.temp }}/news-outbox.json
     steps:
       - uses: actions/checkout@v4
       # Urutan penting: terapkan -> simpan ke repo -> BARU konfirmasi di Telegram.
       # Bila push gagal, langkah konfirmasi tidak jalan: tombol tetap utuh dan
       # ketukan yang sama diproses ulang pada run berikutnya.
       - name: Process Telegram buttons
+        env:
+          NEWS_OUTBOX: ${{ runner.temp }}/news-outbox.json
         run: node scripts/telegram-news.mjs process
       - name: Commit changes and deploy
         run: |
@@ -55,4 +56,6 @@ jobs:
             gh workflow run pages.yml --ref "${GITHUB_REF_NAME}"
           fi
       - name: Confirm in Telegram
+        env:
+          NEWS_OUTBOX: ${{ runner.temp }}/news-outbox.json
         run: node scripts/telegram-news.mjs confirm
