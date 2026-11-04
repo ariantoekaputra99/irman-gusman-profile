@@ -219,6 +219,17 @@ export const news: News[] = newsData;
  */
 export const gallery: GalleryItem[] = [
   {
+    // Potret utama (dipakai di hero Beranda). File dari pengelola situs.
+    // TODO: ganti `credit` dengan pemilik/fotografer asli dan isi `license`
+    // bila sudah dipastikan.
+    id: "potret-utama",
+    src: "/gallery/irman-gusman.jpg",
+    alt: "Potret Irman Gusman mengenakan jas gelap dan kemeja putih",
+    caption: "Potret",
+    credit: "Arsip pengelola situs",
+    orientation: "portrait",
+  },
+  {
     id: "kpu-infopemilu",
     src: "https://infopemilu.kpu.go.id/berkas-dpd/13/13_7_IRMAN%20GUSMAN.jpg",
     alt: "Potret Irman Gusman",
