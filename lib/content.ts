@@ -9,7 +9,10 @@
  * - Setiap berita/dokumen wajib punya sumber yang bisa diverifikasi publik.
  * - Gambar lokal diletakkan di `public/gallery/` dan ditulis sebagai
  *   `/gallery/nama-file.jpg`; gambar eksternal memakai URL https penuh.
+ * - Berita disimpan di `data/news.json` (lihat CMS.md, bagian "Berita otomatis").
  */
+
+import newsData from "@/data/news.json";
 
 /* ------------------------------------------------------------------ */
 /* Tipe                                                                */
@@ -86,6 +89,10 @@ export const site = {
   url: "https://ariantoekaputra99.github.io/irman-gusman-profile/",
   disclaimer:
     "Situs ini merupakan profil publik nonresmi. Informasi jabatan, kegiatan, dan berita dapat berubah. Gunakan sumber resmi yang ditautkan untuk verifikasi terbaru.",
+  /** Wajib tampil di halaman yang memuat berita agar kurasi tidak tampak sebagai arsip lengkap. */
+  newsNote:
+    "Daftar ini adalah sorotan kegiatan yang dipilih secara editorial dari sumber publik, bukan arsip lengkap pemberitaan. Untuk seluruh pemberitaan, gunakan pencarian berita independen.",
+  newsSearchUrl: "https://news.google.com/search?q=%22Irman%20Gusman%22&hl=id&gl=ID&ceid=ID:id",
 };
 
 export const nav = [
@@ -199,39 +206,7 @@ export const focus: FocusItem[] = [
 /* Berita & kegiatan                                                   */
 /* ------------------------------------------------------------------ */
 
-export const news: News[] = [
-  {
-    slug: "rakernas-mdmc",
-    title:
-      "Di Rakernas MDMC, Irman Gusman bahas penguatan jejaring kemanusiaan",
-    excerpt: "Kegiatan dan pernyataan publik dalam Rakernas MDMC.",
-    date: "2026-09-14",
-    category: "Kegiatan",
-    source: "Portal DPD RI",
-    url: "https://orchard.dpd.go.id/daftar-berita/di-rakernas-mdmc-irman-gusman-kepercayaan-publik-jadi-modal-mdmc-perluas-jejaring-kemanusiaan",
-    featured: true,
-  },
-  {
-    slug: "diaspora-padang-panjang",
-    title:
-      "Irman Gusman dorong Padang Panjang memanfaatkan kekuatan diaspora",
-    excerpt: "Sorotan pada jejaring diaspora untuk pembangunan daerah.",
-    date: "2026-09-04",
-    category: "Daerah",
-    source: "Portal DPD RI",
-    url: "https://orchard.dpd.go.id/daftar-berita/irman-gusman-dorong-padang-panjang-kapitalisasi-kekuatan-diaspora-untuk-pembangunan-daerah",
-    featured: true,
-  },
-  {
-    slug: "ruu-perampasan-aset",
-    title: "Pernyataan mengenai RUU Perampasan Aset",
-    excerpt: "Pernyataan publik mengenai legislasi dan tata kelola.",
-    date: "2026-07-16",
-    category: "Legislasi",
-    source: "Portal DPD RI",
-    url: "https://orchard.dpd.go.id/daftar-berita/irman-gusman-the-public-is-waiting-the-asset-forfeiture-bill-must-be-completed-this-year",
-  },
-];
+export const news: News[] = newsData;
 
 /* ------------------------------------------------------------------ */
 /* Galeri                                                              */

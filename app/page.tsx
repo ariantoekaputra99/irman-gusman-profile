@@ -10,6 +10,7 @@ import {
   gallery,
   introText,
   newsSorted,
+  site,
   timeline,
 } from "@/lib/content";
 import { asset } from "@/lib/asset";
@@ -167,14 +168,15 @@ export default function Home() {
               <div>
                 <p className="eyebrow">04 · KEGIATAN</p>
                 <h2 className="serif text-5xl md:text-7xl leading-none">
-                  Berita &amp; dokumentasi.
+                  Sorotan kegiatan.
                 </h2>
               </div>
               <Link href="/news" className="gold text-xs font-bold whitespace-nowrap">
                 LIHAT SEMUA →
               </Link>
             </div>
-            <div className="grid md:grid-cols-3 gap-5 mt-14">
+            <p className="note mt-8 max-w-3xl">{site.newsNote}</p>
+            <div className="grid md:grid-cols-3 gap-5 mt-10">
               {latest.map((n) => (
                 <article className="card p-7 min-h-72" key={n.slug}>
                   <small className="gold uppercase tracking-widest">
