@@ -1,0 +1,51 @@
+name: Process news approvals
+
+# Tiap 10 menit: baca tombol Setujui/Tolak yang ditekan di Telegram dan terapkan.
+# Berita yang disetujui di-commit ke main lalu memicu deploy Pages.
+# (Commit oleh GITHUB_TOKEN tidak memicu workflow lain, jadi deploy dipicu
+# eksplisit lewat workflow_dispatch.)
+#
+# Bot ini harus bot KHUSUS untuk fitur ini: Telegram hanya mengizinkan satu
+# pembaca getUpdates per bot, dan tidak boleh ada webhook aktif pada bot yang sama.
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: news-bot
+  cancel-in-progress: false
+
+jobs:
+  process:
+    runs-on: ubuntu-latest
+    env:
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Process Telegram buttons
+        run: node scripts/telegram-news.mjs process
+      - name: Commit changes and deploy
+        run: |
+          git config user.name "news-bot"
+          git config user.email "news-bot@users.noreply.github.com"
+          git add data/news.json data/news-candidates.json data/news-rejected.json
+          if git diff --cached --quiet; then
+            echo "Tidak ada perubahan."
+            exit 0
+          fi
+          published=false
+          git diff --cached --quiet -- data/news.json || published=true
+          git commit -m "Tinjauan berita via Telegram"
+          git pull --rebase origin "${GITHUB_REF_NAME}"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
+          if [ "$published" = true ]; then
+            gh workflow run pages.yml --ref "${GITHUB_REF_NAME}"
+          fi

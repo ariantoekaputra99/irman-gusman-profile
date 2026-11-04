@@ -38,18 +38,24 @@ Berita terbaru diambil dari RSS Google Berita oleh `scripts/fetch-news.mjs`.
 Alurnya sengaja **tidak otomatis tayang**:
 
 1. **Ambil**: `npm run news:fetch` (atau workflow `news-candidates.yml` tiap
-   Senin, yang membuka PR). Hanya judul, tautan, tanggal, dan nama sumber yang
+   hari, yang juga mengirim hasilnya ke Telegram). Hanya judul, tautan, tanggal, dan nama sumber yang
    disimpan; isi artikel tidak diunduh.
 2. **Saring**: judul harus menyebut "Irman Gusman", tidak memuat kata
    bermasalah (daftar `NEGATIVE` di `scripts/news-filter.mjs`: perkara hukum,
    sidang, sengketa, kritik, dsb.), dan memuat kata kegiatan positif (daftar
    `POSITIVE`). Hasilnya masuk `data/news-candidates.json`.
-3. **Tinjau**: `npm run news:list`, baca artikel aslinya, lalu
-   - setujui: `npm run news:approve -- <slug> --category Daerah --excerpt "ringkasan sendiri"`
-   - tolak: `npm run news:reject -- <slug>` (tidak diusulkan lagi).
+3. **Tinjau lewat Telegram** (utama): tiap kandidat dikirim ke chat kamu
+   dengan tombol **Setujui** / **Tolak** dan tombol buka artikel. Setujui =
+   masuk `data/news.json` lalu situs di-deploy otomatis; Tolak = dibuang dan
+   tidak diusulkan lagi. Pesan diedit menjadi "DISETUJUI"/"DITOLAK" sebagai
+   konfirmasi. Tanpa Telegram, tinjau dari terminal:
+   - `npm run news:list`
+   - `npm run news:approve -- <slug|id> --category Daerah --excerpt "ringkasan sendiri"`
+   - `npm run news:reject -- <slug|id>`
 
 Penyaring kata kunci hanya saringan awal: ia tidak memahami nada kalimat,
-jadi manusia yang memutuskan. Utamakan sumber resmi/kredibel, dan tulis
+jadi manusia yang memutuskan. Satu ketukan langsung menayangkan, jadi baca
+artikel aslinya lebih dulu. Utamakan sumber resmi/kredibel, dan tulis
 ringkasan sendiri.
 
 **Kurasi harus transparan.** Karena yang tayang hanya berita pilihan, halaman
@@ -57,9 +63,30 @@ ringkasan sendiri.
 secara editorial, bukan arsip lengkap") beserta tautan ke pencarian berita
 independen. Jangan menghapus catatan itu.
 
+### Setup bot Telegram (sekali saja)
+
+1. Di Telegram buka @BotFather, kirim `/newbot`, simpan token. Pakai bot
+   **khusus** untuk fitur ini (satu bot hanya boleh punya satu pembaca
+   `getUpdates`, dan tidak boleh ada webhook aktif).
+2. Kirim satu pesan apa saja ke bot barumu, lalu buka
+   `https://api.telegram.org/bot<TOKEN>/getUpdates` di browser dan catat
+   `chat.id`. Lakukan ini **sebelum** langkah 3.
+3. Di GitHub: Settings -> Secrets and variables -> Actions, tambahkan
+   `TELEGRAM_BOT_TOKEN` dan `TELEGRAM_CHAT_ID`. Jangan membagikan token di chat
+   atau issue; jika bocor, buat ulang lewat BotFather (`/revoke`).
+4. Jalankan workflow **Fetch news candidates** secara manual (Actions ->
+   Run workflow) untuk menguji.
+
+Cara kerja: `news-candidates.yml` mengirim kandidat tiap hari (maks. 10 per
+run); `news-approval.yml` membaca tombol yang ditekan tiap 10 menit, jadi
+konfirmasi bisa tertunda beberapa menit (jadwal GitHub tidak presisi). Hanya
+tekanan tombol dari `TELEGRAM_CHAT_ID` yang diproses. Berita yang disetujui
+dari Telegram memakai kategori "Kegiatan" dan tanpa ringkasan; ubah di
+`data/news.json` bila perlu.
+
 Menambah sumber RSS lain: edit `FEEDS` di `scripts/fetch-news.mjs`. Menguji
-penyaring: `npm test`. Workflow terjadwal memerlukan pengaturan Settings ->
-Actions -> General -> "Allow GitHub Actions to create and approve pull requests".
+penyaring: `npm test`. Workflow commit langsung ke `main` memakai `GITHUB_TOKEN`; jika `main`
+dilindungi aturan branch, beri pengecualian untuk Actions.
 
 ## Build & deploy
 

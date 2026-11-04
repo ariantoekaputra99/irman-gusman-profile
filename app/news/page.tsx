@@ -33,7 +33,7 @@ export default function NewsPage() {
               <time dateTime={n.date}>{formatDate(n.date)}</time> · {n.category}
             </small>
             <h2 className="serif text-2xl mt-12">{n.title}</h2>
-            <p className="text-sm text-neutral-500">{n.excerpt}</p>
+            {n.excerpt && <p className="text-sm text-neutral-500">{n.excerpt}</p>}
             <a
               href={n.url}
               target="_blank"

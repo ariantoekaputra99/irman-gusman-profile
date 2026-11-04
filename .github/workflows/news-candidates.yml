@@ -1,46 +1,50 @@
 name: Fetch news candidates
 
-# Mengambil kandidat berita terbaru dan membuka PR berisi data/news-candidates.json.
-# Kandidat TIDAK tayang di situs; tinjau dengan `npm run news:list`, lalu setujui
-# atau tolak (lihat CMS.md). Perlu pengaturan: Settings -> Actions -> General ->
-# "Allow GitHub Actions to create and approve pull requests".
+# Setiap hari: ambil kandidat berita, kirim ke Telegram dengan tombol
+# Setujui/Tolak, lalu simpan penanda "sudah dikirim" ke repo.
+# Kandidat TIDAK tayang sebelum disetujui (lihat news-approval.yml).
+#
+# Secrets yang diperlukan (Settings -> Secrets and variables -> Actions):
+#   TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
+# Tanpa keduanya, langkah Telegram dilewati dan kandidat hanya disimpan di
+# data/news-candidates.json.
 
 on:
   schedule:
-    - cron: "17 2 * * 1" # Senin 09:17 WIB
+    - cron: "17 2 * * *" # 09:17 WIB
   workflow_dispatch:
 
 permissions:
   contents: write
-  pull-requests: write
+
+concurrency:
+  group: news-bot
+  cancel-in-progress: false
 
 jobs:
   fetch:
     runs-on: ubuntu-latest
+    env:
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-      - name: Run filter tests
+      - name: Run tests
         run: node --test scripts/*.test.mjs
       - name: Fetch candidates
         run: node scripts/fetch-news.mjs
-      - name: Open pull request if there are new candidates
-        uses: peter-evans/create-pull-request@v7
-        with:
-          branch: news/candidates
-          add-paths: data/news-candidates.json
-          commit-message: "Update kandidat berita"
-          title: "Kandidat berita baru (menunggu tinjauan)"
-          body: |
-            Kandidat berita hasil penyaringan otomatis. **Belum tayang** di situs.
-
-            Penyaring kata kunci tidak bisa menilai nada berita. Sebelum menyetujui:
-            - baca artikel aslinya, jangan hanya judulnya;
-            - utamakan sumber yang kredibel/resmi;
-            - tulis ringkasan sendiri (`--excerpt`), jangan menyalin teks artikel.
-
-            Setujui: `npm run news:approve -- <slug> --category Daerah --excerpt "..."`
-            Tolak:   `npm run news:reject -- <slug>`
-          delete-branch: true
+      - name: Send candidates to Telegram
+        run: node scripts/telegram-news.mjs send
+      - name: Commit candidate state
+        if: always()
+        run: |
+          git config user.name "news-bot"
+          git config user.email "news-bot@users.noreply.github.com"
+          git add data/news-candidates.json
+          if git diff --cached --quiet; then
+            echo "Tidak ada perubahan."
+          else
+            git commit -m "Update kandidat berita"
+            git pull --rebase origin "${GITHUB_REF_NAME}"
+            git push origin "HEAD:${GITHUB_REF_NAME}"
+          fi

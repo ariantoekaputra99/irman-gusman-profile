@@ -183,7 +183,7 @@ export default function Home() {
                     {formatDate(n.date)} · {n.category}
                   </small>
                   <h3 className="serif text-2xl mt-12">{n.title}</h3>
-                  <p className="text-sm text-neutral-500">{n.excerpt}</p>
+                  {n.excerpt && <p className="text-sm text-neutral-500">{n.excerpt}</p>}
                   <a
                     className="text-xs font-bold gold"
                     href={n.url}
