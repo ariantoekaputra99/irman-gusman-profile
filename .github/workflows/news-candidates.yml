@@ -13,6 +13,11 @@ on:
   schedule:
     - cron: "17 2 * * *" # 09:17 WIB
   workflow_dispatch:
+    inputs:
+      resend:
+        description: "Kirim ulang SEMUA kandidat yang masih menunggu (tombol lama hilang/terlewat)"
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -35,7 +40,7 @@ jobs:
       - name: Fetch candidates
         run: node scripts/fetch-news.mjs
       - name: Send candidates to Telegram
-        run: node scripts/telegram-news.mjs send
+        run: node scripts/telegram-news.mjs send ${{ inputs.resend && '--resend' || '' }}
       - name: Commit candidate state
         if: always()
         run: |
