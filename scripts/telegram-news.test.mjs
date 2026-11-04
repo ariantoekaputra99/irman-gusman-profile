@@ -153,11 +153,70 @@ test("process: gagal menjawab/mengedit tidak membatalkan persetujuan", async () 
   assert.equal(s.approved, 1);
 });
 
-test("error API tidak membocorkan token", async () => {
+const noSleep = async () => {};
+
+test("error jaringan: dicoba ulang, pesan memuat kode tetapi tidak token/URL", async () => {
+  let n = 0;
+  const err = Object.assign(new Error("fetch failed https://api.telegram.org/botSECRET-TOKEN/getUpdates"), {
+    cause: { code: "ETIMEDOUT" },
+  });
   const bot = createBot({
     token: "SECRET-TOKEN",
     chatId: OWNER,
-    fetchImpl: async () => { throw new Error("connect ECONNREFUSED https://api.telegram.org/botSECRET-TOKEN/x"); },
+    fetchImpl: async () => { n++; throw err; },
+    sleep: noSleep,
   });
-  await assert.rejects(bot.call("getUpdates", {}), (e) => !e.message.includes("SECRET-TOKEN"));
+  await assert.rejects(bot.call("getUpdates", {}), (e) => {
+    assert.match(e.message, /ETIMEDOUT/);
+    assert.match(e.message, /3x percobaan/);
+    assert.equal(e.message.includes("SECRET-TOKEN"), false);
+    assert.equal(e.message.includes("api.telegram.org"), false);
+    return true;
+  });
+  assert.equal(n, 3);
+});
+
+test("error jaringan sesaat: berhasil pada percobaan berikutnya", async () => {
+  let n = 0;
+  const bot = createBot({
+    token: "T",
+    chatId: OWNER,
+    sleep: noSleep,
+    fetchImpl: async () => {
+      if (++n < 3) throw Object.assign(new Error("x"), { name: "TimeoutError" });
+      return { ok: true, json: async () => ({ ok: true, result: "ok" }) };
+    },
+  });
+  assert.equal(await bot.call("sendMessage", {}), "ok");
+  assert.equal(n, 3);
+});
+
+test("429: menunggu retry_after lalu mencoba lagi", async () => {
+  const waits = [];
+  let n = 0;
+  const bot = createBot({
+    token: "T",
+    chatId: OWNER,
+    sleep: async (ms) => { waits.push(ms); },
+    fetchImpl: async () => {
+      if (++n === 1) {
+        return { ok: false, status: 429, json: async () => ({ ok: false, description: "Too Many Requests", parameters: { retry_after: 7 } }) };
+      }
+      return { ok: true, json: async () => ({ ok: true, result: 1 }) };
+    },
+  });
+  assert.equal(await bot.call("sendMessage", {}), 1);
+  assert.deepEqual(waits, [7000]);
+});
+
+test("401/400: tidak dicoba ulang dan pesan API apa adanya", async () => {
+  let n = 0;
+  const bot = createBot({
+    token: "T",
+    chatId: OWNER,
+    sleep: noSleep,
+    fetchImpl: async () => { n++; return { ok: false, status: 401, json: async () => ({ ok: false, description: "Unauthorized" }) }; },
+  });
+  await assert.rejects(bot.call("getUpdates", {}), /Unauthorized/);
+  assert.equal(n, 1);
 });

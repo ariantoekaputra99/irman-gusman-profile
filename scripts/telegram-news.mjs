@@ -14,8 +14,13 @@
 // Judul berita berasal dari sumber luar, jadi dikirim sebagai teks biasa
 // (tanpa parse_mode) dan data tombol dibatasi pola ketat.
 
+import dns from "node:dns";
 import { pathToFileURL } from "node:url";
 import { candidateId, createStore } from "./news-store.mjs";
+
+// Runner GitHub tidak punya IPv6 yang andal; bila IPv6 dicoba dulu, tiap sambungan
+// baru ke api.telegram.org bisa tertahan puluhan detik sebelum jatuh ke IPv4.
+dns.setDefaultResultOrder("ipv4first");
 
 const clean = (s, max) =>
   String(s ?? "")
@@ -24,25 +29,52 @@ const clean = (s, max) =>
     .trim()
     .slice(0, max);
 
-export function createBot({ token, chatId, fetchImpl = fetch }) {
+class ApiError extends Error {}
+
+const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/** Kode error jaringan yang aman dicetak (tanpa pesan/URL/token). */
+const safeCode = (e) => {
+  const c = e?.cause?.code ?? e?.code ?? e?.name ?? "UNKNOWN";
+  return /^[A-Za-z0-9_]{1,40}$/.test(String(c)) ? String(c) : "UNKNOWN";
+};
+
+export function createBot({
+  token,
+  chatId,
+  fetchImpl = fetch,
+  attempts = 3,
+  timeoutMs = 15_000,
+  sleep = wait,
+}) {
   async function call(method, body) {
-    let res;
-    try {
-      res = await fetchImpl(`https://api.telegram.org/bot${token}/${method}`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(body),
-        signal: AbortSignal.timeout(30_000),
-      });
-    } catch {
-      // Sengaja tidak menyertakan detail error agar token/URL tidak bocor ke log.
-      throw new Error(`Telegram ${method}: permintaan gagal`);
+    let code = "UNKNOWN";
+    for (let i = 1; i <= attempts; i++) {
+      let res;
+      try {
+        res = await fetchImpl(`https://api.telegram.org/bot${token}/${method}`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(body),
+          signal: AbortSignal.timeout(timeoutMs),
+        });
+      } catch (e) {
+        // Hanya kode error yang dicetak, supaya token/URL tidak bocor ke log.
+        code = safeCode(e);
+        if (i < attempts) await sleep(1000 * i);
+        continue;
+      }
+      const json = await res.json().catch(() => ({}));
+      if (res.ok && json.ok) return json.result;
+
+      const retryable = res.status === 429 || res.status >= 500;
+      if (!retryable || i === attempts) {
+        throw new ApiError(`Telegram ${method}: ${clean(json.description, 120) || res.status}`);
+      }
+      const retryAfter = Number(json?.parameters?.retry_after);
+      await sleep(Math.min(Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter : 2 ** i, 30) * 1000);
     }
-    const json = await res.json().catch(() => ({}));
-    if (!res.ok || !json.ok) {
-      throw new Error(`Telegram ${method}: ${clean(json.description, 120) || res.status}`);
-    }
-    return json.result;
+    throw new Error(`Telegram ${method}: permintaan gagal (${code}, ${attempts}x percobaan)`);
   }
   return { chatId: String(chatId), call };
 }
@@ -59,7 +91,7 @@ export function formatMessage(c) {
 }
 
 /** Kirim kandidat yang belum pernah dikirim. Menyimpan penanda `notified` per kandidat. */
-export async function sendCandidates(bot, store, { limit = 10 } = {}) {
+export async function sendCandidates(bot, store, { limit = 10, log = () => {} } = {}) {
   const list = await store.readCandidates();
   let sent = 0;
   for (const c of list) {
@@ -80,6 +112,7 @@ export async function sendCandidates(bot, store, { limit = 10 } = {}) {
     });
     c.notified = true;
     sent++;
+    log(`  terkirim ${sent}: ${clean(c.title, 70)}`);
     // Simpan setelah tiap pengiriman agar tidak terkirim ganda bila ada kegagalan di tengah.
     await store.writeCandidates(list);
   }
@@ -167,7 +200,7 @@ async function main() {
   const store = createStore();
 
   if (cmd === "send") {
-    const r = await sendCandidates(bot, store);
+    const r = await sendCandidates(bot, store, { log: console.log });
     console.log(`Terkirim ${r.sent} kandidat; ${r.pending} masih antre.`);
   } else if (cmd === "process") {
     const r = await processUpdates(bot, store);
