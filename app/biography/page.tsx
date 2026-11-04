@@ -1,1 +1,25 @@
-import Link from "next/link";export default function Biography(){return <main className="wrap py-32 max-w-4xl"><Link href="/" className="gold text-xs">← Kembali</Link><p className="eyebrow mt-10">BIOGRAFI</p><h1 className="serif text-6xl">Irman Gusman</h1><p className="text-lg text-neutral-600 mt-8">Irman Gusman lahir di Padang Panjang, Sumatera Barat, pada 11 Februari 1962. Riwayat publiknya mencakup pendidikan ekonomi, dunia usaha, organisasi, serta pengalaman di DPD RI.</p><h2 className="serif text-3xl mt-16">Pendidikan</h2><p className="text-neutral-600">Daftar riwayat hidup MPR RI mencatat pendidikan Fakultas Ekonomi Universitas Kristen Indonesia pada 1985.</p></main>}
+import type { Metadata } from "next";
+import PageShell from "@/components/PageShell";
+import { biography, profile } from "@/lib/content";
+
+export const metadata: Metadata = {
+  title: "Biografi",
+  description: biography.lead,
+};
+
+export default function BiographyPage() {
+  return (
+    <PageShell eyebrow="BIOGRAFI" title={profile.name} intro={biography.lead}>
+      {biography.sections.map((s) => (
+        <section key={s.heading}>
+          <h2 className="serif text-3xl mt-16">{s.heading}</h2>
+          {s.paragraphs.map((p) => (
+            <p className="text-neutral-600 mt-3" key={p}>
+              {p}
+            </p>
+          ))}
+        </section>
+      ))}
+    </PageShell>
+  );
+}
