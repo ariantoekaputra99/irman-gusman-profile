@@ -84,6 +84,13 @@ tekanan tombol dari `TELEGRAM_CHAT_ID` yang diproses. Berita yang disetujui
 dari Telegram memakai kategori "Kegiatan" dan tanpa ringkasan; ubah di
 `data/news.json` bila perlu.
 
+Jika langkah Telegram gagal, baca pesan di log:
+- `permintaan gagal (KODE, 3x percobaan)`: masalah jaringan runner ke Telegram
+  (mis. `ETIMEDOUT`, `UND_ERR_CONNECT_TIMEOUT`); coba jalankan ulang.
+- `Unauthorized`: token salah. `chat not found`: chat ID salah.
+- `Conflict`: bot yang sama dibaca program lain atau punya webhook; pakai bot khusus.
+- `bot can't initiate conversation`: tekan Start pada bot.
+
 Menambah sumber RSS lain: edit `FEEDS` di `scripts/fetch-news.mjs`. Menguji
 penyaring: `npm test`. Workflow commit langsung ke `main` memakai `GITHUB_TOKEN`; jika `main`
 dilindungi aturan branch, beri pengecualian untuk Actions.
