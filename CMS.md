@@ -48,7 +48,7 @@ Alurnya sengaja **tidak otomatis tayang**:
    dengan tombol **Setujui** / **Tolak** dan tombol buka artikel. Setujui =
    masuk `data/news.json` lalu situs di-deploy otomatis; Tolak = dibuang dan
    tidak diusulkan lagi. Pesan diedit menjadi "DISETUJUI"/"DITOLAK" sebagai
-   konfirmasi. Tanpa Telegram, tinjau dari terminal:
+   konfirmasi, **hanya setelah** perubahan berhasil tersimpan ke repo. Tanpa Telegram, tinjau dari terminal:
    - `npm run news:list`
    - `npm run news:approve -- <slug|id> --category Daerah --excerpt "ringkasan sendiri"`
    - `npm run news:reject -- <slug|id>`
@@ -83,6 +83,15 @@ konfirmasi bisa tertunda beberapa menit (jadwal GitHub tidak presisi). Hanya
 tekanan tombol dari `TELEGRAM_CHAT_ID` yang diproses. Berita yang disetujui
 dari Telegram memakai kategori "Kegiatan" dan tanpa ringkasan; ubah di
 `data/news.json` bila perlu.
+
+Urutan di `news-approval.yml`: terapkan tombol -> commit & push ke `main` ->
+baru ubah pesan di Telegram. Jadi pesan "DISETUJUI" berarti sudah tersimpan di
+`main` (situs tayang setelah deploy selesai, ~1-2 menit). Jika push gagal,
+tombol tetap utuh dan diproses ulang di run berikutnya.
+
+Tombol lama hilang/terlewat? Jalankan **Fetch news candidates** manual
+(Run workflow) dengan opsi **resend** dicentang: semua kandidat yang masih
+menunggu dikirim ulang dengan tombol baru.
 
 Jika langkah Telegram gagal, baca pesan di log:
 - `permintaan gagal (KODE, 3x percobaan)`: masalah jaringan runner ke Telegram

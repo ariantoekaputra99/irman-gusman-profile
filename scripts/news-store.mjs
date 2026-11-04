@@ -36,6 +36,17 @@ export function createStore(dir = DEFAULT_DIR) {
     readRejected: () => read("news-rejected.json", []),
     writeCandidates: (list) => write("news-candidates.json", list),
 
+    /** Status sebenarnya sebuah id: pending | approved | rejected | unknown. */
+    async stateOf(id) {
+      const cands = await read("news-candidates.json", []);
+      if (cands.some((c) => candidateId(c) === id)) return "pending";
+      const news = await read("news.json", []);
+      if (news.some((n) => n.url && candidateId(n) === id)) return "approved";
+      const rejected = await read("news-rejected.json", []);
+      if (rejected.some((u) => candidateId({ url: u }) === id)) return "rejected";
+      return "unknown";
+    },
+
     /** Cari kandidat berdasarkan slug ATAU id pendek. */
     async find(key) {
       const list = await read("news-candidates.json", []);

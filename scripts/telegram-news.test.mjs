@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtemp, writeFile, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { createBot, processUpdates, sendCandidates } from "./telegram-news.mjs";
+import { applyOutbox, createBot, processUpdates, sendCandidates } from "./telegram-news.mjs";
 import { candidateId, createStore } from "./news-store.mjs";
 
 const OWNER = "111";
@@ -76,14 +76,16 @@ test("send: mengirim dengan tombol, menandai notified, menghormati batas", async
   assert.deepEqual(r2, { sent: 1, pending: 0 });
 });
 
-test("process: setujui memindahkan ke news.json dan membersihkan field internal", async () => {
+const writeCalls = (tg) => tg.calls.filter((c) => c.method !== "getUpdates");
+
+test("process: setujui memindahkan ke news.json, TANPA menyentuh Telegram (tulis)", async () => {
   const { dir, store } = await setup([cand(1), cand(2)]);
   const id1 = candidateId(cand(1));
   const tg = fakeTelegram([tap(10, `a:${id1}`)]);
   const bot = createBot({ token: "T", chatId: OWNER, fetchImpl: tg.fetchImpl });
 
-  const s = await processUpdates(bot, store);
-  assert.deepEqual(s, { approved: 1, rejected: 0, missing: 0, ignored: 0 });
+  const { summary, outbox } = await processUpdates(bot, store);
+  assert.deepEqual(summary, { approved: 1, rejected: 0, missing: 0, ignored: 0 });
 
   const news = JSON.parse(await readFile(path.join(dir, "news.json"), "utf8"));
   assert.equal(news.length, 1);
@@ -91,7 +93,12 @@ test("process: setujui memindahkan ke news.json dan membersihkan field internal"
   for (const k of ["matched", "status", "id", "notified"]) assert.equal(k in news[0], false, k);
   assert.equal((await store.readCandidates()).length, 1);
 
-  // Pesan diedit (tombol hilang) dan update dikonfirmasi dengan offset.
+  // Belum ada edit pesan / konfirmasi offset: itu menunggu applyOutbox.
+  assert.equal(writeCalls(tg).length, 0);
+  assert.equal(tg.calls.some((c) => c.body.offset), false);
+  assert.equal(outbox.maxId, 10);
+
+  await applyOutbox(bot, outbox);
   assert.ok(tg.calls.some((c) => c.method === "editMessageText" && c.body.text.startsWith("✅ DISETUJUI")));
   assert.ok(tg.calls.some((c) => c.method === "getUpdates" && c.body.offset === 11));
 });
@@ -101,11 +108,12 @@ test("process: tolak mencatat URL dan tidak menayangkan", async () => {
   const tg = fakeTelegram([tap(20, `r:${candidateId(cand(1))}`)]);
   const bot = createBot({ token: "T", chatId: OWNER, fetchImpl: tg.fetchImpl });
 
-  const s = await processUpdates(bot, store);
-  assert.equal(s.rejected, 1);
+  const { summary, outbox } = await processUpdates(bot, store);
+  assert.equal(summary.rejected, 1);
   assert.deepEqual(JSON.parse(await readFile(path.join(dir, "news-rejected.json"), "utf8")), ["https://example.test/1"]);
   assert.deepEqual(JSON.parse(await readFile(path.join(dir, "news.json"), "utf8")), []);
   assert.equal((await store.readCandidates()).length, 0);
+  assert.equal(outbox.items[0].state, "rejected");
 });
 
 test("process: tombol dari pihak lain diabaikan dan tidak mengubah data", async () => {
@@ -117,40 +125,77 @@ test("process: tombol dari pihak lain diabaikan dan tidak mengubah data", async 
   ]);
   const bot = createBot({ token: "T", chatId: OWNER, fetchImpl: tg.fetchImpl });
 
-  const s = await processUpdates(bot, store);
-  assert.deepEqual(s, { approved: 0, rejected: 0, missing: 0, ignored: 2 });
+  const { summary, outbox } = await processUpdates(bot, store);
+  assert.deepEqual(summary, { approved: 0, rejected: 0, missing: 0, ignored: 2 });
   assert.equal((await store.readCandidates()).length, 1);
-  assert.equal(tg.calls.some((c) => c.method === "editMessageText"), false);
+
+  await applyOutbox(bot, outbox);
+  assert.equal(tg.calls.some((c) => c.method === "editMessageText"), false, "pesan pemilik tidak diedit");
+  assert.equal(tg.calls.filter((c) => c.method === "answerCallbackQuery").length, 2);
 });
 
-test("process: data tombol tak valid diabaikan; ketukan ulang idempoten", async () => {
+test("process: data tak valid diabaikan; ketukan ganda tetap berlabel DISETUJUI", async () => {
   const { store } = await setup([cand(1)]);
   const id = candidateId(cand(1));
   const tg = fakeTelegram([
     tap(40, "a:../../etc/passwd"),
-    tap(41, `a:${id}`),
-    tap(42, `a:${id}`),
-    tap(43, `r:${id}`),
+    tap(41, `a:${id}`, { messageId: 7 }),
+    tap(42, `a:${id}`, { messageId: 7 }),
+    tap(43, `r:${id}`, { messageId: 7 }),
   ]);
   const bot = createBot({ token: "T", chatId: OWNER, fetchImpl: tg.fetchImpl });
 
-  const s = await processUpdates(bot, store);
-  assert.deepEqual(s, { approved: 1, rejected: 0, missing: 2, ignored: 1 });
+  const { summary, outbox } = await processUpdates(bot, store);
+  assert.deepEqual(summary, { approved: 1, rejected: 0, missing: 2, ignored: 1 });
+
+  await applyOutbox(bot, outbox);
+  const edits = tg.calls.filter((c) => c.method === "editMessageText");
+  assert.equal(edits.length, 3);
+  assert.ok(edits.every((e) => e.body.text.startsWith("✅ DISETUJUI")), "label tidak tertimpa 'sudah diproses'");
 });
 
-test("process: gagal menjawab/mengedit tidak membatalkan persetujuan", async () => {
+test("jika penyimpanan gagal (outbox tak diterapkan), ketukan diproses ulang dan tombol utuh", async () => {
+  const { dir } = await setup([cand(1)]);
+  const id = candidateId(cand(1));
+  const tg = fakeTelegram([tap(60, `a:${id}`)]);
+  const bot = createBot({ token: "T", chatId: OWNER, fetchImpl: tg.fetchImpl });
+
+  // Run 1: diproses di salinan, tetapi "push gagal" -> applyOutbox tidak dipanggil.
+  await processUpdates(bot, createStore(dir));
+  assert.equal(writeCalls(tg).length, 0, "tidak ada efek ke Telegram");
+
+  // Run 2 di checkout baru (data asli): update yang sama masih dikirim ulang oleh Telegram.
+  const fresh = await setup([cand(1)]);
+  const { summary } = await processUpdates(bot, fresh.store);
+  assert.equal(summary.approved, 1);
+});
+
+test("applyOutbox: gagal menjawab/mengedit tidak membatalkan konfirmasi offset", async () => {
   const { store } = await setup([cand(1)]);
   const id = candidateId(cand(1));
   const queue = [tap(50, `a:${id}`)];
+  const seen = [];
   const fetchImpl = async (url, init) => {
     const method = url.split("/").pop();
     const body = JSON.parse(init.body);
+    seen.push({ method, body });
     if (method === "getUpdates") return { ok: true, json: async () => ({ ok: true, result: body.offset ? [] : queue }) };
     return { ok: false, status: 400, json: async () => ({ ok: false, description: "query is too old" }) };
   };
   const bot = createBot({ token: "T", chatId: OWNER, fetchImpl });
-  const s = await processUpdates(bot, store);
-  assert.equal(s.approved, 1);
+  const { summary, outbox } = await processUpdates(bot, store);
+  assert.equal(summary.approved, 1);
+  await applyOutbox(bot, outbox);
+  assert.ok(seen.some((c) => c.method === "getUpdates" && c.body.offset === 51));
+});
+
+test("send --resend: mengirim ulang kandidat yang masih menunggu", async () => {
+  const { store } = await setup([{ ...cand(1), notified: true }, { ...cand(2), notified: true }]);
+  const tg = fakeTelegram();
+  const bot = createBot({ token: "T", chatId: OWNER, fetchImpl: tg.fetchImpl });
+
+  assert.equal((await sendCandidates(bot, store)).sent, 0);
+  assert.equal((await sendCandidates(bot, store, { resend: true })).sent, 2);
 });
 
 const noSleep = async () => {};

@@ -2,7 +2,9 @@
 // Persetujuan berita lewat Telegram.
 //
 //   node scripts/telegram-news.mjs send      kirim kandidat baru (dengan tombol Setujui/Tolak)
-//   node scripts/telegram-news.mjs process   proses tombol yang sudah ditekan
+//   node scripts/telegram-news.mjs send --resend   kirim ulang semua yang masih menunggu
+//   node scripts/telegram-news.mjs process   terapkan tombol yang sudah ditekan ke data
+//   node scripts/telegram-news.mjs confirm   ubah pesan Telegram (jalankan SESUDAH push berhasil)
 //
 // Env: TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID (jika kosong, perintah dilewati).
 //
@@ -15,6 +17,9 @@
 // (tanpa parse_mode) dan data tombol dibatasi pola ketat.
 
 import dns from "node:dns";
+import { readFile, writeFile, rm } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { candidateId, createStore } from "./news-store.mjs";
 
@@ -91,8 +96,10 @@ export function formatMessage(c) {
 }
 
 /** Kirim kandidat yang belum pernah dikirim. Menyimpan penanda `notified` per kandidat. */
-export async function sendCandidates(bot, store, { limit = 10, log = () => {} } = {}) {
+export async function sendCandidates(bot, store, { limit = 10, log = () => {}, resend = false } = {}) {
   const list = await store.readCandidates();
+  // Kirim ulang semua yang masih menunggu (mis. tombol lama sudah hilang/terlewat).
+  if (resend) for (const c of list) delete c.notified;
   let sent = 0;
   for (const c of list) {
     if (c.notified) continue;
@@ -121,15 +128,25 @@ export async function sendCandidates(bot, store, { limit = 10, log = () => {} } 
 
 const bestEffort = (p) => p.catch(() => {});
 
-/** Proses tombol yang ditekan sejak pemrosesan terakhir. */
+const LABELS = {
+  approved: "✅ DISETUJUI (tayang setelah deploy)",
+  rejected: "❌ DITOLAK",
+  unknown: "ℹ️ Sudah diproses sebelumnya",
+};
+
+/**
+ * Terapkan tombol yang ditekan ke berkas data. TIDAK ada panggilan tulis ke
+ * Telegram di sini: pesan baru diubah dan update baru dikonfirmasi oleh
+ * `applyOutbox` SESUDAH perubahan berhasil di-push. Bila penyimpanan gagal,
+ * tombol tetap utuh dan ketukan diproses ulang pada run berikutnya.
+ */
 export async function processUpdates(bot, store) {
-  const base = { allowed_updates: ["callback_query"], timeout: 0 };
-  const updates = await bot.call("getUpdates", { ...base, limit: 100 });
+  const updates = await bot.call("getUpdates", { ...BASE, limit: 100 });
   const summary = { approved: 0, rejected: 0, missing: 0, ignored: 0 };
-  let maxId = -1;
+  const outbox = { maxId: -1, items: [] };
 
   for (const u of updates) {
-    maxId = Math.max(maxId, u.update_id);
+    outbox.maxId = Math.max(outbox.maxId, u.update_id);
     const cb = u.callback_query;
     if (!cb) continue;
 
@@ -137,7 +154,7 @@ export async function processUpdates(bot, store) {
       String(cb.from?.id) === bot.chatId && String(cb.message?.chat?.id) === bot.chatId;
     if (!fromOwner) {
       summary.ignored++;
-      await bestEffort(bot.call("answerCallbackQuery", { callback_query_id: cb.id, text: "Tidak diizinkan." }));
+      outbox.items.push({ callbackId: cb.id, answer: "Tidak diizinkan." });
       continue;
     }
 
@@ -148,38 +165,49 @@ export async function processUpdates(bot, store) {
     }
 
     const [, action, id] = m;
-    let label;
-    if (action === "a") {
-      const entry = await store.approve(id);
-      if (entry) { summary.approved++; label = "✅ DISETUJUI (tayang setelah deploy)"; }
-      else { summary.missing++; label = "ℹ️ Sudah diproses sebelumnya"; }
-    } else {
-      const c = await store.reject(id);
-      if (c) { summary.rejected++; label = "❌ DITOLAK"; }
-      else { summary.missing++; label = "ℹ️ Sudah diproses sebelumnya"; }
-    }
+    const done = action === "a" ? await store.approve(id) : await store.reject(id);
+    if (done) summary[action === "a" ? "approved" : "rejected"]++;
+    else summary.missing++;
 
+    // Label dari status nyata, bukan dari hasil ketukan ini: ketukan ganda tetap
+    // menampilkan DISETUJUI/DITOLAK, bukan "sudah diproses".
+    const state = await store.stateOf(id);
+    outbox.items.push({
+      callbackId: cb.id,
+      messageId: cb.message?.message_id,
+      text: clean(cb.message?.text, 3500),
+      state,
+    });
+  }
+  return { summary, outbox };
+}
+
+const BASE = { allowed_updates: ["callback_query"], timeout: 0 };
+
+/** Konfirmasi ke Telegram setelah data tersimpan. Semua upaya terbaik, kecuali offset. */
+export async function applyOutbox(bot, outbox) {
+  for (const it of outbox.items) {
+    if (it.state === "pending") continue; // belum berubah: biarkan tombol
+    const label = it.answer ?? LABELS[it.state] ?? LABELS.unknown;
     // Jawaban callback kedaluwarsa dalam hitungan menit, jadi hanya upaya terbaik.
-    await bestEffort(bot.call("answerCallbackQuery", { callback_query_id: cb.id, text: label.slice(0, 190) }));
-    // Mengganti teks pesan sekaligus menghapus tombol: ini konfirmasi yang sebenarnya.
-    if (cb.message?.message_id) {
+    await bestEffort(bot.call("answerCallbackQuery", { callback_query_id: it.callbackId, text: label.slice(0, 190) }));
+    if (it.messageId && !it.answer) {
       await bestEffort(
         bot.call("editMessageText", {
           chat_id: bot.chatId,
-          message_id: cb.message.message_id,
-          text: `${label}\n\n${clean(cb.message.text, 3500)}`,
+          message_id: it.messageId,
+          text: `${label}\n\n${it.text}`,
           disable_web_page_preview: true,
         }),
       );
     }
   }
-
-  // Konfirmasi update yang sudah diproses agar tidak dikirim ulang.
-  if (maxId >= 0) await bot.call("getUpdates", { ...base, offset: maxId + 1, limit: 1 });
-  return summary;
+  if (outbox.maxId >= 0) await bot.call("getUpdates", { ...BASE, offset: outbox.maxId + 1, limit: 1 });
 }
 
 /* ------------------------------- CLI ------------------------------- */
+
+const OUTBOX = process.env.NEWS_OUTBOX || path.join(os.tmpdir(), "news-outbox.json");
 
 async function main() {
   const cmd = process.argv[2];
@@ -200,15 +228,27 @@ async function main() {
   const store = createStore();
 
   if (cmd === "send") {
-    const r = await sendCandidates(bot, store, { log: console.log });
+    const r = await sendCandidates(bot, store, { log: console.log, resend: process.argv.includes("--resend") });
     console.log(`Terkirim ${r.sent} kandidat; ${r.pending} masih antre.`);
   } else if (cmd === "process") {
-    const r = await processUpdates(bot, store);
+    const { summary: r, outbox } = await processUpdates(bot, store);
+    await writeFile(OUTBOX, JSON.stringify(outbox));
     console.log(
       `Disetujui ${r.approved}, ditolak ${r.rejected}, sudah diproses ${r.missing}, diabaikan ${r.ignored}.`,
     );
+  } else if (cmd === "confirm") {
+    let outbox;
+    try {
+      outbox = JSON.parse(await readFile(OUTBOX, "utf8"));
+    } catch {
+      console.log("Tidak ada konfirmasi tertunda.");
+      return;
+    }
+    await applyOutbox(bot, outbox);
+    await rm(OUTBOX, { force: true });
+    console.log(`Dikonfirmasi ke Telegram (${outbox.items.length} ketukan).`);
   } else {
-    console.error("Perintah: send | process");
+    console.error("Perintah: send [--resend] | process | confirm");
     process.exitCode = 1;
   }
 }
