@@ -151,7 +151,8 @@
     "matched": [
       "dorong"
     ],
-    "status": "pending"
+    "status": "pending",
+    "notified": true
   },
   {
     "slug": "2026-10-10-irman-gusman-dorong-the-new-master-plan-untuk-masa-depan-kab",
@@ -164,7 +165,8 @@
     "matched": [
       "dorong"
     ],
-    "status": "pending"
+    "status": "pending",
+    "notified": true
   },
   {
     "slug": "2026-10-10-bupati-solok-terima-kunjungan-anggota-dpd-ri-irman-gusman-ba",
@@ -178,7 +180,8 @@
       "kunjungan",
       "pemulihan"
     ],
-    "status": "pending"
+    "status": "pending",
+    "notified": true
   },
   {
     "slug": "2026-10-09-irman-gusman-dorong-pariwisata-sumbar-jadi-motor-ekonomi-mas",
@@ -191,7 +194,8 @@
     "matched": [
       "dorong"
     ],
-    "status": "pending"
+    "status": "pending",
+    "notified": true
   },
   {
     "slug": "2026-10-09-irman-gusman-dorong-penerbangan-langsung-johor-padang-untuk",
@@ -204,6 +208,7 @@
     "matched": [
       "dorong"
     ],
-    "status": "pending"
+    "status": "pending",
+    "notified": true
   }
 ]
